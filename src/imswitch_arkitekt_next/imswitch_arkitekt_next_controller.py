@@ -9,7 +9,7 @@ from imswitch.imcommon.framework import Worker
 import threading
 
 import numpy as np
-from arkitekt_next import register, easy
+from arkitekt_next import easy
 import time
 from typing import Generator
 from mikro_next.api.schema import Image, from_array_like
@@ -27,12 +27,13 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         self.app.register(self.generate_n_string)
         self.app.register(self.upload_image)
         self.app.register(self.print_string)
-        threading.Thread(target=self.app.enter).start()
+        self.app.enter()
         
         self.__logger.debug("Start Arkitekt Runtime")
-        self._serverWorker = ArkitektRuntime(self)
-        self._thread = threading.Thread(target=self._serverWorker.run)
-        self._thread.start()
+        threading.Thread(target=self.app.run).start()
+        #self._serverWorker = ArkitektRuntime(self)
+        #self._thread = threading.Thread(target=self._serverWorker.run)
+        #self._thread.start()
 
         
     
