@@ -1,8 +1,4 @@
 from imswitch.imcontrol.view.widgets.basewidgets import Widget
-from imswitch.imcommon.model import initLogger
-import numpy as np
-from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass
 
 global_app = None
 class imswitch_arkitekt_next_widget(Widget):

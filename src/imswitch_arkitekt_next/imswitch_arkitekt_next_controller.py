@@ -5,11 +5,14 @@ from imswitch.imcontrol.view.ImConMainView import _DockInfo
 from imswitch.imcommon.controller import MainController
 from imswitch.imcommon.model.logging import initLogger
 from imswitch.imcontrol.controller.controllers.LaserController import LaserController
+from imswitch.imcommon.framework import Worker
+import threading
+
 import numpy as np
 from arkitekt_next import register, easy
 import time
 from typing import Generator
-
+from mikro_next.api.schema import Image, from_array_like
 
 class imswitch_arkitekt_next_controller(ImConWidgetController):
     """Linked to CameraPluginWidget."""
@@ -17,12 +20,21 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
         self.__logger.debug("Initializing imswitch arkitekt_next controller")
-        self.run()
+        
+        # initalize arkitekt connection                
+        self.app = easy("TEST", url="localhost")
+        # bind functions to the app
+        self.app.register(self.generate_n_string)
+        self.app.register(self.upload_image)
+        self.app.register(self.print_string)
+        
+        self.__logger.debug("Start Arkitekt Runtime")
+        self._serverWorker = ArkitektRuntime(self)
+        self._thread = threading.Thread(target=self._serverWorker.run)
+        self._thread.start()
 
-    # You can register your functions by using the @register decorator
-    # functions always run in a threadpool and are not blocking 
-    # all functions must be registered before the run function is called
-    @register
+        
+    
     def generate_n_string(self, n: int = 10, timeout: int = 2) -> Generator[str, None, None]:
         """Generate N Strings
 
@@ -50,16 +62,9 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
     # you cannot omit the typehints, Image is a custom type that is used to represent images
     # that are stored on the mikro-next server
     # If you omit documentation, function names will be infered from the function name
-
-    @register
     def upload_image(self, image_name: str) -> Image:
         return from_array_like(np.random.rand(100, 100, 3) * 255, name=image_name)
 
-
-
-
-    # 
-    @register
     def print_string(self, input: str) -> str:
         """Print String
 
@@ -79,28 +84,54 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         print(input)
         return input
 
+class ServerThread(threading.Thread):
+    def __init__(self, parent):
+        super().__init__()
+        self.server = None
+        self.parent = parent
 
-
-    # This is the part that runs the server
-    # Everything must be registered before this function is called
-
-
-    # The easy function is a context manager as it will need to clean
-    # up the resources it uses when the context is exited (when the user stops the app)
-    # make sure to give your app a name, (and the url/ip of the arkitekt server) 
     def run(self):
-        e = easy("TEST", url="localhost")
+        try:
+            self.server = self.parent.app
+            self.server.run()
+        except Exception as e:
+            print(f"Couldn't start server: {e}")
 
-        # If you want to perform a request to the server before enabling the
-        # provisioning loop you can do that within the context
+    def stop(self):
+        if self.server:
+            self.server.should_exit = True
+            self.server.lifespan.shutdown()
+            self.server
+            print("Arkitekt Server is stopping...")
+            
+class ArkitektRuntime(Worker):
 
-        # from_array_like(np.random.rand(100, 100, 3) * 255, name="test")
-        # would upload an image to the server on app start
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        self._paused = False
+        self._canceled = False
 
-        # e.run() will start the provisioning loop of this app
-        # this will block the thread and keep the app running until the user
-        # stops the app (keyboard interrupt)
-        e.run()
+        self.__logger =  initLogger(self)
+
+    def moveToThread(self, thread) -> None:
+        return super().moveToThread(thread)
+
+    def run(self):
+        # Create and start the server thread
+        self.server_thread = threading.Thread(target=self.parent.app.run)# ServerThread(self.parent)
+        self.server_thread.start()
+
+    def stop(self):
+        self.__logger.debug("Stopping arkitekt")
+        try:
+            self.server_thread.stop()
+            #self.server_thread.join()
+        except Exception as e:
+            self.__logger.error("Couldn't stop server: "+str(e))
+
+
+
 
 # Copyright (C) 2020-2021 ImSwitch developers
 # This file is part of ImSwitch.
