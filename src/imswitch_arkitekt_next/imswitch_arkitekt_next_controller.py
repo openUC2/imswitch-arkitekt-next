@@ -27,6 +27,7 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         self.app.register(self.generate_n_string)
         self.app.register(self.upload_image)
         self.app.register(self.print_string)
+        threading.Thread(target=self.app.enter).start()
         
         self.__logger.debug("Start Arkitekt Runtime")
         self._serverWorker = ArkitektRuntime(self)
