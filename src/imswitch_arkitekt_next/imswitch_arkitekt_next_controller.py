@@ -6,6 +6,7 @@ from imswitch.imcommon.controller import MainController
 from imswitch.imcommon.model.logging import initLogger
 from imswitch.imcontrol.controller.controllers.LaserController import LaserController
 from imswitch.imcommon.framework import Worker
+from imswitch.imcommon.model import APIExport
 import threading
 
 import numpy as np
@@ -28,15 +29,15 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         self.app.register(self.upload_image)
         self.app.register(self.print_string)
         self.app.enter()
-        
+        self.app.run_detached()
         self.__logger.debug("Start Arkitekt Runtime")
-        threading.Thread(target=self.app.run).start()
+        #threading.Thread(target=self.app.run).start()
         #self._serverWorker = ArkitektRuntime(self)
         #self._thread = threading.Thread(target=self._serverWorker.run)
         #self._thread.start()
 
         
-    
+    @APIExport()
     def generate_n_string(self, n: int = 10, timeout: int = 2) -> Generator[str, None, None]:
         """Generate N Strings
 
@@ -86,52 +87,9 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         print(input)
         return input
 
-class ServerThread(threading.Thread):
-    def __init__(self, parent):
-        super().__init__()
-        self.server = None
-        self.parent = parent
-
-    def run(self):
-        try:
-            self.server = self.parent.app
-            self.server.run()
-        except Exception as e:
-            print(f"Couldn't start server: {e}")
-
-    def stop(self):
-        if self.server:
-            self.server.should_exit = True
-            self.server.lifespan.shutdown()
-            self.server
-            print("Arkitekt Server is stopping...")
-            
-class ArkitektRuntime(Worker):
-
-    def __init__(self, parent):
-        super().__init__()
-        self.parent = parent
-        self._paused = False
-        self._canceled = False
-
-        self.__logger =  initLogger(self)
-
-    def moveToThread(self, thread) -> None:
-        return super().moveToThread(thread)
-
-    def run(self):
-        # Create and start the server thread
-        self.server_thread = threading.Thread(target=self.parent.app.run)# ServerThread(self.parent)
-        self.server_thread.start()
-
-    def stop(self):
-        self.__logger.debug("Stopping arkitekt")
-        try:
-            self.server_thread.stop()
-            #self.server_thread.join()
-        except Exception as e:
-            self.__logger.error("Couldn't stop server: "+str(e))
-
+    def on_close(self):
+        self.app.cancel()
+        self.app.exit()
 
 
 
