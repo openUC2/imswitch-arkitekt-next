@@ -7,7 +7,9 @@ from imswitch.imcommon.model.logging import initLogger
 from imswitch.imcontrol.controller.controllers.LaserController import LaserController
 from imswitch.imcommon.framework import Worker
 from imswitch.imcommon.model import APIExport
+from koil.psygnal import signals_to_sync
 import threading
+from psygnal import emit_queued
 
 import numpy as np
 from arkitekt_next import easy
@@ -28,16 +30,19 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         self.app.register(self.generate_n_string)
         self.app.register(self.upload_image)
         self.app.register(self.print_string)
-        self.app.koil.uvify = False
+        self.app.register(self.scan2DImageTiles)
+        # self.app.koil.uvify = False
         self.app.enter()
-        self.handle = self.app.run_detached()
         self.__logger.debug("Start Arkitekt Runtime")
-        #threading.Thread(target=self.app.run).start()
-        #self._serverWorker = ArkitektRuntime(self)
-        #self._thread = threading.Thread(target=self._serverWorker.run)
-        #self._thread.start()
-
         
+        # This wraps the signals into a (koiled) synchronous function that can be called from any subthread
+        # as koiled-functions can also listen to cancelations we propagate the cancel signal to another thread
+        # and set cancel_event when the signal is received
+        self._commChannel.sigStartTileBasedTileScanning = signals_to_sync(self._commChannel.sigStartTileBasedTileScanning, 
+                                                                          self._commChannel.sigOnResultTileBasedTileScanning)
+        self.handle = self.app.run_detached()
+
+
     def generate_n_string(self, n: int = 10, timeout: int = 2) -> Generator[str, None, None]:
         """Generate N Strings
 
@@ -87,6 +92,45 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         print(input)
         return input
 
+    def scan2DImageTiles(self, numberTilesX = 3, numberTilesY = 3, stepSizeX = 300, stepSizeY = 300, nTimes = 1, tPeriod = 1, illuSource = 0, initPosX = 0, initPosY = 0, isStitchAshlar = False, isStitchAshlarFlipX = True, isStitchAshlarFlipY = True) -> Image:
+        """ Scan 2D Image Tiles 
+        
+        This function scans 2D image tiles with the given parameters
+        numberTilesX: int - The number of tiles in the x direction
+        numberTilesY: int - The number of tiles in the y direction
+        stepSizeX: float - The step size in the x direction
+        stepSizeY: float - The step size in the y direction
+        nTimes: int - The number of times to scan
+        tPeriod: float - The period of time between each scan
+        illuSource: int - The illumination source
+        initPosX: float - The initial position in the x direction
+        initPosY: float - The initial position in the y direction
+        isStitchAshlar: bool - Should we stitch the ashlar
+        isStitchAshlarFlipX: bool - Should we flip the ashlar in the x direction
+        isStitchAshlarFlipY: bool - Should we flip the ashlar in the y direction
+        
+        should return the image
+        """
+        #lambda numberTilesX, numberTilesY, stepSizeX, stepSizeY, nTimes, tPeriod, illuSource, initPosX, initPosY, isStitchAshlar, isStitchAshlarFlipX, isStitchAshlarFlipY: self._commChannel.sigStartTileBasedTileScanning.emit(numberTilesX, numberTilesY, stepSizeX, stepSizeY, nTimes, tPeriod, illuSource, initPosX, initPosY, isStitchAshlar, isStitchAshlarFlipX, isStitchAshlarFlipY)
+        mResult = np.random.rand(1, 1, 3, 100, 100) * 255 #  c, t, z, x, y
+        
+        if 1:
+            numberTilesX = 3    
+            numberTilesY = 3
+            stepSizeX = 300
+            stepSizeY = 300
+            nTimes = 1
+            tPeriod = 1
+            illuSource = 0
+            initPosX = 0
+            initPosY = 0
+            isStitchAshlar = False
+            isStitchAshlarFlipX = True
+            isStitchAshlarFlipY = True
+
+        mResult = self._commChannel.sigStartTileBasedTileScanning(numberTilesX, numberTilesY, stepSizeX, stepSizeY, nTimes, tPeriod, illuSource, initPosX, initPosY, isStitchAshlar, isStitchAshlarFlipX, isStitchAshlarFlipY)
+        return from_array_like(mResult, name="Scan2DImageTiles")
+        
     def on_close(self):
         self.app.cancel()
         self.app.exit()
