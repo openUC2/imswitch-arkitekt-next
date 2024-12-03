@@ -129,6 +129,11 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
             isStitchAshlarFlipY = True
 
         mResult = self._commChannel.sigStartTileBasedTileScanning(numberTilesX, numberTilesY, stepSizeX, stepSizeY, nTimes, tPeriod, illuSource, initPosX, initPosY, isStitchAshlar, isStitchAshlarFlipX, isStitchAshlarFlipY)
+        # ensure result is in dimensions c, t, z, x, y
+        if len(mResult.shape) != 5:
+            mResult = np.expand_dims(mResult, axis=0)
+            mResult = np.expand_dims(mResult, axis=0)
+            mResult = np.expand_dims(mResult, axis=0)
         return from_array_like(mResult, name="Scan2DImageTiles")
         
     def on_close(self):
