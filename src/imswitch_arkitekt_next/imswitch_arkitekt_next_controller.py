@@ -10,20 +10,26 @@ from imswitch.imcommon.model import APIExport
 from koil.psygnal import signals_to_sync
 import threading
 from psygnal import emit_queued
-
 import numpy as np
-from arkitekt_next import easy
 import time
 from typing import Generator
-from mikro_next.api.schema import Image, from_array_like
 
+try:
+    from arkitekt_next import easy
+    from mikro_next.api.schema import Image, from_array_like
+    IS_ARKITEKT = True
+except ImportError:
+    IS_ARKITEKT = False
+    easy = None
+    
 class imswitch_arkitekt_next_controller(ImConWidgetController):
     """Linked to CameraPluginWidget."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
         self.__logger.debug("Initializing imswitch arkitekt_next controller")
-        
+        if not IS_ARKITEKT:
+            return 
         # initalize arkitekt connection                
         self.app = easy("TEST", url="localhost")
         # bind functions to the app
@@ -31,6 +37,7 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         self.app.register(self.upload_image)
         self.app.register(self.print_string)
         self.app.register(self.scan2DImageTiles)
+        self.app.register(self.manual2DStageScan)
         # self.app.koil.uvify = False
         self.app.enter()
         self.__logger.debug("Start Arkitekt Runtime")
@@ -136,6 +143,29 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
             mResult = np.expand_dims(mResult, axis=0)
         return from_array_like(mResult, name="Scan2DImageTiles")
         
+    def manual2DStageScan(self):
+        # select detectors
+        allDetectorNames = self._master.detectorsManager.getAllDeviceNames()
+        self.microscopeDetector = self._master.detectorsManager[allDetectorNames[0]] # FIXME: This is hardcoded, need to be changed through the GUI
+        mFrame = self.microscopeDetector.getLatestFrame()
+
+        # select lasers and add to gui
+        allLaserNames = self._master.lasersManager.getAllDeviceNames()
+        if "LED" in allLaserNames:
+            self.led = self._master.lasersManager["LED"]
+        else:
+            self.led = None
+        self.led.setEnabled(1)
+        self.led.setValue(255)
+        
+        # select stage
+        self.stages = self._master.positionersManager[self._master.positionersManager.getAllDeviceNames()[0]]        
+        currentPos = self.stages.getPosition()
+        posX, posY = 100,100
+        self.stages.move(value=(posX, posY), axis="XY", is_absolute=True, is_blocking=False, acceleration=(self.acceleration,self.acceleration))
+
+
+        # build crazy workflow 
     def on_close(self):
         self.app.cancel()
         self.app.exit()
