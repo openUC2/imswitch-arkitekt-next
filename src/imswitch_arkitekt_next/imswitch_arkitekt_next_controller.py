@@ -46,6 +46,7 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         self.app.register(self.generate_n_string)
         self.app.register(self.capture_latest_image)
         self.app.register(self.print_string)
+        self.app.register(self.move_to_position)
         self.app.register(self.scan2DImageTiles)
         self.app.register(self.manual2DStageScan)
         self.app.register(self.tile_scan)
@@ -182,15 +183,35 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
                     )
 
         return coordinates
+    
+    
+    def move_to_position(self, x: int, y: int):
+        """Move to position
+
+        This function moves the stage to the given position
+
+        Parameters
+        ----------
+        x : int
+            The x position
+        y : int
+            The y position
+        """
+        self.stages.move(
+            value=(x, y),
+            axis="XY",
+            is_absolute=True,
+            is_blocking=True,
+        )
         
         
     def tile_scan(
         self,
-        minPosX: float,
-        maxPosX: float,
-        minPosY: float,
-        maxPosY: float,
-        overlap: float=0.75,
+        minPosX: int,
+        maxPosX: int,
+        minPosY: int,
+        maxPosY: int,
+        overlap: int=0.75,
         nTimes: int =1,
         tSettle: float =0.05,
     ) -> Generator[Image, None, None]:
@@ -201,7 +222,6 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         initPosY = initialPosition["Y"]
         
         
-        self.acceleration = 0.5
         
         
         if not self.microscopeDetector._running:
@@ -235,7 +255,6 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
                 axis="XY",
                 is_absolute=True,
                 is_blocking=True,
-                acceleration=(self.acceleration, self.acceleration),
             )
             # move to all coordinates and take an image
 
@@ -254,7 +273,6 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
                     axis="XY",
                     is_absolute=True,
                     is_blocking=True,
-                    acceleration=(self.acceleration, self.acceleration),
                 )
                 time.sleep(tSettle)
 
