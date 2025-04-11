@@ -1,3 +1,4 @@
+import datetime
 import imswitch
 from imswitch.imcontrol.model.managers.detectors.DetectorManager import DetectorManager, DetectorAction, DetectorNumberParameter
 from imswitch.imcontrol.controller.basecontrollers import ImConWidgetController
@@ -8,11 +9,14 @@ from imswitch.imcontrol.controller.controllers.LaserController import LaserContr
 from imswitch.imcommon.framework import Worker
 from imswitch.imcommon.model import APIExport
 from koil.psygnal import signals_to_sync
+from mikro_next.api.schema import PartialRGBViewInput, ColorMap, AffineTransformationView, create_stage, PartialAffineTransformationViewInput
+from arkitekt_next import progress
 import threading
 from psygnal import emit_queued
 import numpy as np
 import time
 from typing import Generator
+import xarray as xr
 
 try:
     from arkitekt_next import easy
@@ -30,16 +34,31 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         self.__logger.debug("Initializing imswitch arkitekt_next controller")
         if not IS_ARKITEKT:
             return 
+        
+        
+        allDetectorNames = self._master.detectorsManager.getAllDeviceNames()
+        self.microscopeDetector = self._master.detectorsManager[
+            allDetectorNames[0]
+        ]  # FIXME: This is hardcoded, need to be changed through the GUI
         # initalize arkitekt connection                
-        self.app = easy("TEST", url="localhost")
+        self.app = easy("TEST", url="go.arkitekt.live")
         # bind functions to the app
         self.app.register(self.generate_n_string)
-        self.app.register(self.upload_image)
+        self.app.register(self.capture_latest_image)
         self.app.register(self.print_string)
+        self.app.register(self.move_to_position)
         self.app.register(self.scan2DImageTiles)
         self.app.register(self.manual2DStageScan)
+        self.app.register(self.tile_scan)
         # self.app.koil.uvify = False
         self.app.enter()
+        self.active_stage = None
+        
+        self.stages = self._master.positionersManager[self._master.positionersManager.getAllDeviceNames()[0]]        
+        self.pixelSizeXY = self.microscopeDetector.pixelSizeUm[-1]
+        
+        
+        
         self.__logger.debug("Start Arkitekt Runtime")
         
         # This wraps the signals into a (koiled) synchronous function that can be called from any subthread
@@ -77,8 +96,203 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
     # you cannot omit the typehints, Image is a custom type that is used to represent images
     # that are stored on the mikro-next server
     # If you omit documentation, function names will be infered from the function name
-    def upload_image(self, image_name: str) -> Image:
-        return from_array_like(np.random.rand(100, 100, 3) * 255, name=image_name)
+    
+    
+    def capture_latest_image(self, image_name: str) -> Image:
+        
+        self.active_stage = create_stage("stage")
+        
+        # get the current position of the stage
+        currentPos = self.stages.getPosition()
+        print(currentPos)
+        posX , posY = currentPos.get("X", 0), currentPos.get("Y", 0)
+        
+        
+       
+        affine_view = PartialAffineTransformationViewInput(
+            affineMatrix=[
+                [self.pixelSizeXY, 0, posX, 1],
+                [0, self.pixelSizeXY, posY, 1],
+                [0, 0, 1,   1],
+                [0, 0, 0, 1]
+            ],
+            stage=self.active_stage
+            
+        )
+        
+        
+        
+        frame = self.microscopeDetector.getLatestFrame()
+        if frame is None:
+            return
+        if len(frame.shape) == 2:
+            frame = np.repeat(frame[:, :, np.newaxis], 3, axis=2)
+            
+            
+        
+        
+        print("Frame")
+        print(frame.mean())
+        
+        return from_array_like(xr.DataArray(frame, dims=list("xyc")), name=image_name, rgb_views=[
+            PartialRGBViewInput(cMin=0, cMax=1, contrastLimitMax=frame.max(), contrastLimitMin=frame.min(), colorMap=ColorMap.RED, baseColor=[0, 0, 0]),
+            PartialRGBViewInput(cMin=1, cMax=2, contrastLimitMax=frame.max(), contrastLimitMin=frame.min(), colorMap=ColorMap.GREEN, baseColor=[0, 0, 0]),
+            PartialRGBViewInput(cMin=2, cMax=3, contrastLimitMax=frame.max(), contrastLimitMin=frame.min(), colorMap=ColorMap.BLUE, baseColor=[0, 0, 0])
+        ], transformation_views=[
+            affine_view
+        ])
+        
+        
+    def generate_snake_scan_coordinates(
+        self, posXmin, posYmin, posXmax, posYmax, img_width, img_height, overlap
+    ):
+        #Generating snake scan coordinates, 0.2, 0.2, 3000.0, 3000.0, 400.0, 300.0, 20.0
+        string = f"Generating snake scan coordinates, {posXmin}, {posYmin}, {posXmax}, {posYmax}, {img_width}, {img_height}, {overlap}"
+        print(string)
+        progress(0, string)
+        # Calculate the number of steps in x and y directions
+        steps_x = int((posXmax - posXmin) / (img_width * overlap))
+        steps_y = int((posYmax - posYmin) / (img_height * overlap))
+
+        print(steps_x, steps_y)
+        coordinates = []
+
+        # Loop over the positions in a snake pattern
+        for y in range(steps_y):
+            if y % 2 == 0:  # Even rows: left to right
+                for x in range(steps_x):
+                    coordinates.append([
+                        (
+                            posXmin + x * img_width * overlap,
+                            posYmin + y * img_height * overlap,
+                        ),
+                        x,
+                        y]
+                    )
+            else:  # Odd rows: right to left
+                for x in range(
+                    steps_x - 1, -1, -1
+                ):  # Starting from the last position, moving backwards
+                    coordinates.append([
+                        (
+                            posXmin + x * img_width * overlap,
+                            posYmin + y * img_height * overlap,
+                        ),
+                        x,
+                        y]
+                    )
+
+        return coordinates
+    
+    
+    def move_to_position(self, x: int, y: int):
+        """Move to position
+
+        This function moves the stage to the given position
+
+        Parameters
+        ----------
+        x : int
+            The x position
+        y : int
+            The y position
+        """
+        self.stages.move(
+            value=(x, y),
+            axis="XY",
+            is_absolute=True,
+            is_blocking=True,
+        )
+        
+        
+    def tile_scan(
+        self,
+        minPosX: int,
+        maxPosX: int,
+        minPosY: int,
+        maxPosY: int,
+        overlap: int=0.75,
+        nTimes: int =1,
+        tSettle: float =0.05,
+    ) -> Generator[Image, None, None]:
+        """ Tile Scan"""
+
+        initialPosition = self.stages.getPosition()
+        initPosX = initialPosition["X"]
+        initPosY = initialPosition["Y"]
+        
+        
+        
+        
+        if not self.microscopeDetector._running:
+            self.microscopeDetector.startAcquisition()
+
+        # now start acquiring images and move the stage in Background
+        mFrame = self.microscopeDetector.getLatestFrame()
+        NpixX, NpixY = mFrame.shape[1], mFrame.shape[0]
+
+        # starting the snake scan
+        # Calculate the size of the area each image covers
+        img_width = NpixX * self.microscopeDetector.pixelSizeUm[-1]
+        img_height = NpixY * self.microscopeDetector.pixelSizeUm[-1]
+        image_dims = (img_width, img_height)
+        # precompute the position list in advance
+        
+        positionList = self.generate_snake_scan_coordinates(
+            minPosX, minPosY, maxPosX, maxPosY, img_width, img_height, overlap
+        )
+
+        maxPosPixY = int((maxPosY - minPosY) / self.microscopeDetector.pixelSizeUm[-1])
+        maxPosPixX = int((maxPosX - minPosX) / self.microscopeDetector.pixelSizeUm[-1])
+
+
+        # perform timelapse imaging
+        for i in range(nTimes):
+
+            # move to the first position
+            self.stages.move(
+                value=positionList[0],
+                axis="XY",
+                is_absolute=True,
+                is_blocking=True,
+            )
+            # move to all coordinates and take an image
+
+            # Scan over all positions in XY
+            for mIndex, iPos in enumerate(positionList):
+                # update the loading bar
+                self.currentPosition = iPos[0]  # use for status updates in the GUI
+                self.currentPositionX = iPos[0][0]
+                self.currentPositionY = iPos[0][1]
+                self.positionList = positionList
+                self.mScanIndex = mIndex
+                progress(mIndex * 100 / len(positionList), f"Scanning {iPos}")
+
+                self.stages.move(
+                    value=self.currentPosition,
+                    axis="XY",
+                    is_absolute=True,
+                    is_blocking=True,
+                )
+                time.sleep(tSettle)
+
+                yield self.capture_latest_image(f"Scanning {self.currentPositionX} {self.currentPositionY} AT {i}")
+
+
+            time.sleep(0.1)
+
+        # return to initial position
+        self.stages.move(
+            value=(initPosX, initPosY),
+            axis="XY",
+            is_absolute=True,
+            is_blocking=False,
+            acceleration=(self.acceleration, self.acceleration),
+        )
+        
+        
+        
+        
 
     def print_string(self, input: str) -> str:
         """Print String
