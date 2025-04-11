@@ -35,6 +35,7 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         if not IS_ARKITEKT:
             return 
         
+        # self.mToken = self._master.pluginInfo.token
         
         allDetectorNames = self._master.detectorsManager.getAllDeviceNames()
         self.microscopeDetector = self._master.detectorsManager[
