@@ -1,13 +1,7 @@
 import datetime
 import imswitch
-from imswitch.imcontrol.model.managers.detectors.DetectorManager import DetectorManager, DetectorAction, DetectorNumberParameter
 from imswitch.imcontrol.controller.basecontrollers import ImConWidgetController
-from imswitch.imcontrol.view.ImConMainView import _DockInfo
-from imswitch.imcommon.controller import MainController
 from imswitch.imcommon.model.logging import initLogger
-from imswitch.imcontrol.controller.controllers.LaserController import LaserController
-from imswitch.imcommon.framework import Worker
-from imswitch.imcommon.model import APIExport
 from koil.psygnal import signals_to_sync
 from mikro_next.api.schema import PartialRGBViewInput, ColorMap, AffineTransformationView, create_stage, PartialAffineTransformationViewInput
 from arkitekt_next import progress
