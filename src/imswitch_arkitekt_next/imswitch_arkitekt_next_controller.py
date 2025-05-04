@@ -2,23 +2,25 @@ import datetime
 import imswitch
 from imswitch.imcontrol.controller.basecontrollers import ImConWidgetController
 from imswitch.imcommon.model.logging import initLogger
-from koil.psygnal import signals_to_sync
-from mikro_next.api.schema import PartialRGBViewInput, ColorMap, AffineTransformationView, create_stage, PartialAffineTransformationViewInput
-from arkitekt_next import progress
 import threading
 from psygnal import emit_queued
 import numpy as np
 import time
 from typing import Generator
 import xarray as xr
-
 try:
+    from koil.psygnal import signals_to_sync
+    from mikro_next.api.schema import PartialRGBViewInput, ColorMap, AffineTransformationView, create_stage, PartialAffineTransformationViewInput
+    from arkitekt_next import progress
     from arkitekt_next import easy
     from mikro_next.api.schema import Image, from_array_like
     IS_ARKITEKT = True
 except ImportError:
     IS_ARKITEKT = False
     easy = None
+    Image = None
+    from_array_like = None
+    PartialRGBViewInput = None
     
 class imswitch_arkitekt_next_controller(ImConWidgetController):
     """Linked to CameraPluginWidget."""
