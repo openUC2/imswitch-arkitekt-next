@@ -5,7 +5,7 @@ class imswitch_arkitekt_next_widget(Widget):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
 class imswitch_arkitekt_next_widget_react(Widget):
     """"""
     pass
