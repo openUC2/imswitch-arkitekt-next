@@ -1,0 +1,48 @@
+name: Build and Push React UI
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/imswitch_lightsheet/ui/**'
+      - '.github/workflows/build_react.yml'
+    branches:
+      - main
+
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/imswitch_lightsheet/ui
+
+    steps:
+      # Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # Build the React app
+      - name: Build React UI
+        run: npm run build
+
+      # Commit and push the dist directory if there are changes
+      - name: Commit and push dist
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add dist
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update dist [auto-build]"
+            git push "https://${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git" HEAD:${GITHUB_REF#refs/heads/}
+          fi
