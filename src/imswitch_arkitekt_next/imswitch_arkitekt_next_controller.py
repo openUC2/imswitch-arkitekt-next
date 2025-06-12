@@ -38,7 +38,7 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
             allDetectorNames[0]
         ]  # FIXME: This is hardcoded, need to be changed through the GUI
         # initalize arkitekt connection                
-        self.app = easy("TEST", url="go.arkitekt.live")
+        self.app = easy("OpenUC2", url="PRESIGNED_URL", redeem_token="PRESIGNED_TOKEN")
         # bind functions to the app
         self.app.register(self.generate_n_string)
         self.app.register(self.capture_latest_image)
