@@ -15,10 +15,12 @@ class imswitch_arkitekt_next_manager(SignalInterface):
         
         # get default configs
         self.arkitekt_config_filename = "config.json"
+        # the config file is stored in the user directory e.g. ~/ImSwitchConfig/arkitekt-next/config.json
         self.defaultConfigPath = os.path.join(dirtools.UserFileDirs.Root, "arkitekt-next")
         if not os.path.exists(self.defaultConfigPath):
             os.makedirs(self.defaultConfigPath)
-
+            self.writeDefaultConfig(self.defaultConfigPath)
+        
         try:
             with open(os.path.join(self.defaultConfigPath, self.arkitekt_config_filename)) as jf:
                 # check if all keys are present 
@@ -32,11 +34,15 @@ class imswitch_arkitekt_next_manager(SignalInterface):
                     
         except Exception as e:
             self.__logger.error(f"s {self.defaultConfigPath}: {e}")
-            self.defaultConfig = {}
-            self.defaultConfig["token"] = "your_token"
-            self.defaultConfig["host"] = "localhost"
-            self.defaultConfig["port"] = 8080
-            self.writeConfig(self.defaultConfig)
+            self.writeDefaultConfig()
+
+    def writeDefaultConfig(self):
+        # generate a default config file
+        self.defaultConfig = {}
+        self.defaultConfig["token"] = "your_token"
+        self.defaultConfig["host"] = "go.arkitekt.live"
+        self.defaultConfig["port"] = 8080
+        self.writeConfig(self.defaultConfig)
 
     def updateConfig(self, parameterName, value):
         with open(os.path.join(self.defaultConfigPath, self.arkitekt_config_filename), "w") as outfile:

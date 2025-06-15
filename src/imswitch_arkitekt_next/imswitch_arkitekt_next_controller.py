@@ -9,13 +9,14 @@ import time
 from typing import Generator
 import xarray as xr
 try:
-    from koil.psygnal import signals_to_sync
+    # check if arkitekt_next is installed
+    #from koil.psygnal import signals_to_sync
     from mikro_next.api.schema import PartialRGBViewInput, ColorMap, AffineTransformationView, create_stage, PartialAffineTransformationViewInput
     from arkitekt_next import progress
     from arkitekt_next import easy
     from mikro_next.api.schema import Image, from_array_like
     IS_ARKITEKT = True
-except ImportError:
+except ModuleNotFoundError:
     IS_ARKITEKT = False
     easy = None
     Image = None
@@ -37,8 +38,11 @@ class imswitch_arkitekt_next_controller(ImConWidgetController):
         self.microscopeDetector = self._master.detectorsManager[
             allDetectorNames[0]
         ]  # FIXME: This is hardcoded, need to be changed through the GUI
-        # initalize arkitekt connection                
-        self.app = easy("TEST", url="go.arkitekt.live")
+        # initalize arkitekt connection # they are loaded from the config file under ImSwitchConfig/arkitekt-next/config.json
+        url = self._master.imswitch_arkitekt_next_manager.defaultConfig["host"]
+        port = self._master.imswitch_arkitekt_next_manager.defaultConfig["port"]
+        token = self._master.imswitch_arkitekt_next_manager.defaultConfig["token"]
+        self.app = easy("OpenUC2", url=f"{url}:{port}", redeem_token=token)
         # bind functions to the app
         self.app.register(self.generate_n_string)
         self.app.register(self.capture_latest_image)
